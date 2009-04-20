@@ -1,0 +1,188 @@
+#!/usr/bin/python
+#
+# Killswitch Applet -- Manage WWAN, WLAN and Bluetooth Killswitches
+#
+# Copyright (C) 2009 Holger Macht <holger@homac.de>
+#
+# This file is released under the WTFPL (http://sam.zoy.org/wtfpl/)
+#
+ 
+import pygtk
+pygtk.require('2.0')
+import gtk
+import dbus
+import os.path
+
+TRAY_ICON_PATH="%s/../share/icons/hicolor/32x32/apps/killswitch-applet.png"
+
+def get_local_path():
+    p = os.path.dirname(__file__)
+    return os.path.abspath(p)
+
+# handling D-Bus interactions...
+class KSADBus:
+    def __init__(self):
+        from dbus.mainloop.glib import DBusGMainLoop
+
+        dbus_loop = DBusGMainLoop()
+
+        self.bus = dbus.SystemBus(mainloop=dbus_loop)
+
+    def get_object(self, dest, udi):
+        return self.bus.get_object(dest, udi)
+        
+    def listen_to_signal(self, cb, signal, iface, destination, udi):
+        self.bus.add_signal_receiver(cb,
+                                     signal,
+                                     iface,
+                                     destination,
+                                     udi, path_keyword="path")
+
+# handling communication with the HAL daemon, derived from KSADBus
+class Hal(KSADBus):
+    def __init__(self):
+        KSADBus.__init__(self)
+
+        self.hal_manager = self.bus.get_object('org.freedesktop.Hal',
+                                               '/org/freedesktop/Hal/Manager')
+
+        self.hal_manager_iface = dbus.Interface(self.hal_manager,
+                                                dbus_interface='org.freedesktop.Hal.Manager')
+
+    def get_property(self, udi, key):
+        manager = self.bus.get_object('org.freedesktop.Hal',
+                                      udi)
+        iface = dbus.Interface(manager,
+                               dbus_interface='org.freedesktop.Hal.Device')
+        if not iface.PropertyExists(key):
+            return False
+        return iface.GetProperty(key)
+
+    def get_kswitch_devices(self):
+        return self.hal_manager_iface.FindDeviceByCapability("killswitch")
+
+    def get_state(self, udi):
+        manager = self.bus.get_object('org.freedesktop.Hal',
+                                      udi)
+        manager_interface = dbus.Interface(manager,
+                                           dbus_interface='org.freedesktop.Hal.Device.KillSwitch')
+        return manager_interface.GetPower()
+
+    def set_state(self, udi, state):
+        manager = self.bus.get_object('org.freedesktop.Hal',
+                                              udi)
+        manager_interface = dbus.Interface(manager,
+                                           dbus_interface='org.freedesktop.Hal.Device.KillSwitch')
+        manager_interface.SetPower(state)        
+
+# main _K_ill_S_witch_A_pplet class
+class KSA:
+    def __init__(self):
+
+        self.bus = Hal()
+
+        self.icon = gtk.status_icon_new_from_file(TRAY_ICON_PATH % get_local_path())
+
+        self.icon.connect("popup_menu", self.on_rightclick, None)
+        self.icon.connect("activate", self.on_leftclick, None)
+
+        self.menu = gtk.Menu()
+
+        self.switches = {}
+
+        for dev in self.bus.get_kswitch_devices():
+            name = self.bus.get_property(dev, "killswitch.name")
+            if name == False:
+                continue
+            self.create_menu_item(dev, name)
+            self.bus.listen_to_signal(self.sig_cb,
+                                      "PropertyModified",
+                                      "org.freedesktop.Hal.Device",
+                                      "org.freedesktop.Hal",
+                                      dev)
+            
+        sep = gtk.SeparatorMenuItem()
+        self.menu.append(sep)
+        sep.show()
+        
+        item = gtk.ImageMenuItem("Enable All")
+        img = gtk.Image()
+        img.set_from_stock(gtk.STOCK_ADD, gtk.ICON_SIZE_MENU)
+        item.set_image(img)
+        self.menu.append(item)
+        item.connect("activate", self.enable_all, None)
+        item.show()
+
+        item = gtk.ImageMenuItem("Disable All")
+        self.menu.append(item)
+        img = gtk.Image()
+        img.set_from_stock(gtk.STOCK_REMOVE, gtk.ICON_SIZE_MENU)
+        item.set_image(img)
+        item.connect("activate", self.disable_all, None)
+        item.show()
+
+        sep = gtk.SeparatorMenuItem()
+        self.menu.append(sep)
+        sep.show()
+
+        item = gtk.MenuItem("Quit")
+        self.menu.append(item)
+        item.connect("activate", self.destroy, None)
+        item.show()
+
+    def enable_all(self, widget, data=None):
+        for udi in self.switches:
+            self.bus.set_state(udi, 1)
+
+    def disable_all(self, widget, data=None):
+        for udi in self.switches:
+            self.bus.set_state(udi, 0)
+
+
+    def on_rightclick(self, widget, button, time, data=None):
+        self.menu.popup(None, None, None, button, time, data=None)
+
+    def on_leftclick(self, widget, button):
+        self.menu.popup(None, None, None, 0, 0, data=None)
+        
+    def create_menu_item(self, udi, name):
+        item = gtk.CheckMenuItem(name)
+
+        self.menu.append(item)
+        self.switches[udi] = item
+        
+        state = self.bus.get_state(udi)
+        print "state of %s is %d" % (udi, state)
+
+        item.set_active(self.bus.get_state(udi))
+
+        item.connect("toggled", self.toggle, udi)
+        item.show()
+
+    def toggle(self, widget, udi):
+        state = self.bus.get_state(udi)
+        if state != widget.get_active():
+            print "setting state to %s" % (not state)
+            self.bus.set_state(udi, not state)
+
+    def sig_cb(self, num_changes, change_list, path):
+        print "signal received %s , %s , %s " % (path, num_changes, change_list)
+        self.update_menu(path)
+
+    def update_menu(self, udi):
+        for item in self.switches:
+            if udi == item:
+                print "updating"
+                state = self.bus.get_state(item)
+                if self.switches[item].get_active() != state:
+                    self.switches[item].set_active(state)
+                
+    def destroy(self, widget, data=None):
+        gtk.main_quit()
+
+    def main(self):
+        gtk.main()
+
+if __name__ == "__main__":
+    base = KSA()
+    base.main()

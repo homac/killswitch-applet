@@ -1,0 +1,7 @@
+include killswitch-applet
+include setup.py
+include README
+include COPYING
+include icons/killswitch-applet.png
+include icons/scalable/killswitch-applet.svg
+include data/killswitch-applet.desktop
