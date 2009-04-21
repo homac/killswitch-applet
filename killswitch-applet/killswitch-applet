@@ -31,13 +31,6 @@ class KSADBus:
     def get_object(self, dest, udi):
         return self.bus.get_object(dest, udi)
         
-    def listen_to_signal(self, cb, signal, iface, destination, udi):
-        self.bus.add_signal_receiver(cb,
-                                     signal,
-                                     iface,
-                                     destination,
-                                     udi, path_keyword="path")
-
 # handling communication with the HAL daemon, derived from KSADBus
 class Hal(KSADBus):
     def __init__(self):
@@ -57,6 +50,13 @@ class Hal(KSADBus):
         if not iface.PropertyExists(key):
             return False
         return iface.GetProperty(key)
+
+    def has_capability(self, udi, capability):
+        manager = self.bus.get_object('org.freedesktop.Hal',
+                                      udi)
+        iface = dbus.Interface(manager,
+                               dbus_interface='org.freedesktop.Hal.Device')
+        return iface.QueryCapability(capability)
 
     def get_kswitch_devices(self):
         return self.hal_manager_iface.FindDeviceByCapability("killswitch")
@@ -95,19 +95,32 @@ class KSA:
             if name == False:
                 continue
             self.create_menu_item(dev, name)
-            self.bus.listen_to_signal(self.sig_cb,
-                                      "PropertyModified",
-                                      "org.freedesktop.Hal.Device",
-                                      "org.freedesktop.Hal",
-                                      dev)
-            
+            self.bus.bus.add_signal_receiver(self.property_modified_cb,
+                                               "PropertyModified",
+                                               "org.freedesktop.Hal.Device",
+                                               "org.freedesktop.Hal",
+                                               dev, path_keyword="path")
+
+        self.bus.bus.add_signal_receiver(self.device_added_cb,
+                                           "DeviceAdded",
+                                           "org.freedesktop.Hal.Manager",
+                                           "org.freedesktop.Hal",
+                                           "/org/freedesktop/Hal/Manager")
+        self.bus.bus.add_signal_receiver(self.device_removed_cb,
+                                           "DeviceRemoved",
+                                           "org.freedesktop.Hal.Manager",
+                                           "org.freedesktop.Hal",
+                                           "/org/freedesktop/Hal/Manager")
+
+
+
         sep = gtk.SeparatorMenuItem()
         self.menu.append(sep)
         sep.show()
         
         item = gtk.ImageMenuItem("Enable All")
         img = gtk.Image()
-        img.set_from_stock(gtk.STOCK_ADD, gtk.ICON_SIZE_MENU)
+        img.set_from_stock(gtk.STOCK_APPLY, gtk.ICON_SIZE_MENU)
         item.set_image(img)
         self.menu.append(item)
         item.connect("activate", self.enable_all, None)
@@ -116,7 +129,7 @@ class KSA:
         item = gtk.ImageMenuItem("Disable All")
         self.menu.append(item)
         img = gtk.Image()
-        img.set_from_stock(gtk.STOCK_REMOVE, gtk.ICON_SIZE_MENU)
+        img.set_from_stock(gtk.STOCK_STOP, gtk.ICON_SIZE_MENU)
         item.set_image(img)
         item.connect("activate", self.disable_all, None)
         item.show()
@@ -125,8 +138,11 @@ class KSA:
         self.menu.append(sep)
         sep.show()
 
-        item = gtk.MenuItem("Quit")
+        item = gtk.ImageMenuItem("Quit")
         self.menu.append(item)
+        img = gtk.Image()
+        img.set_from_stock(gtk.STOCK_QUIT, gtk.ICON_SIZE_MENU)
+        item.set_image(img)
         item.connect("activate", self.destroy, None)
         item.show()
 
@@ -148,7 +164,7 @@ class KSA:
     def create_menu_item(self, udi, name):
         item = gtk.CheckMenuItem(name)
 
-        self.menu.append(item)
+        self.menu.prepend(item)
         self.switches[udi] = item
         
         state = self.bus.get_state(udi)
@@ -165,9 +181,25 @@ class KSA:
             print "setting state to %s" % (not state)
             self.bus.set_state(udi, not state)
 
-    def sig_cb(self, num_changes, change_list, path):
+    def property_modified_cb(self, num_changes, change_list, path):
         print "signal received %s , %s , %s " % (path, num_changes, change_list)
         self.update_menu(path)
+
+    def device_added_cb(self, path):
+        if self.bus.has_capability(path, "killswitch"):
+            print "new killswitch %s  " % (path)
+            name = self.bus.get_property(path, "killswitch.name")
+            if name == False:
+                print "Killswitch has no killswitch.name"
+                return
+            print "adding %s with name %s" % (path, name)
+            self.create_menu_item(path, name)
+
+    def device_removed_cb(self, path):
+        for item in self.switches:
+            if path == item:
+                print "removing killswitch %s" % path
+                self.menu.remove(self.switches[item])
 
     def update_menu(self, udi):
         for item in self.switches:
