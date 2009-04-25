@@ -12,6 +12,7 @@ pygtk.require('2.0')
 import gtk
 import dbus
 import os.path
+import killswitch
 
 TRAY_ICON_PATH="%s/../share/icons/hicolor/32x32/apps/killswitch-applet.png"
 
@@ -19,67 +20,12 @@ def get_local_path():
     p = os.path.dirname(__file__)
     return os.path.abspath(p)
 
-# handling D-Bus interactions...
-class KSADBus:
-    def __init__(self):
-        from dbus.mainloop.glib import DBusGMainLoop
-
-        dbus_loop = DBusGMainLoop()
-
-        self.bus = dbus.SystemBus(mainloop=dbus_loop)
-
-    def get_object(self, dest, udi):
-        return self.bus.get_object(dest, udi)
-        
-# handling communication with the HAL daemon, derived from KSADBus
-class Hal(KSADBus):
-    def __init__(self):
-        KSADBus.__init__(self)
-
-        self.hal_manager = self.bus.get_object('org.freedesktop.Hal',
-                                               '/org/freedesktop/Hal/Manager')
-
-        self.hal_manager_iface = dbus.Interface(self.hal_manager,
-                                                dbus_interface='org.freedesktop.Hal.Manager')
-
-    def get_property(self, udi, key):
-        manager = self.bus.get_object('org.freedesktop.Hal',
-                                      udi)
-        iface = dbus.Interface(manager,
-                               dbus_interface='org.freedesktop.Hal.Device')
-        if not iface.PropertyExists(key):
-            return False
-        return iface.GetProperty(key)
-
-    def has_capability(self, udi, capability):
-        manager = self.bus.get_object('org.freedesktop.Hal',
-                                      udi)
-        iface = dbus.Interface(manager,
-                               dbus_interface='org.freedesktop.Hal.Device')
-        return iface.QueryCapability(capability)
-
-    def get_kswitch_devices(self):
-        return self.hal_manager_iface.FindDeviceByCapability("killswitch")
-
-    def get_state(self, udi):
-        manager = self.bus.get_object('org.freedesktop.Hal',
-                                      udi)
-        manager_interface = dbus.Interface(manager,
-                                           dbus_interface='org.freedesktop.Hal.Device.KillSwitch')
-        return manager_interface.GetPower()
-
-    def set_state(self, udi, state):
-        manager = self.bus.get_object('org.freedesktop.Hal',
-                                              udi)
-        manager_interface = dbus.Interface(manager,
-                                           dbus_interface='org.freedesktop.Hal.Device.KillSwitch')
-        manager_interface.SetPower(state)        
 
 # main _K_ill_S_witch_A_pplet class
 class KSA:
     def __init__(self):
 
-        self.bus = Hal()
+        self.k = killswitch.K()
 
         self.icon = gtk.status_icon_new_from_file(TRAY_ICON_PATH % get_local_path())
 
@@ -90,29 +36,12 @@ class KSA:
 
         self.switches = {}
 
-        for dev in self.bus.get_kswitch_devices():
-            name = self.bus.get_property(dev, "killswitch.name")
-            if name == False:
-                continue
-            self.create_menu_item(dev, name)
-            self.bus.bus.add_signal_receiver(self.property_modified_cb,
-                                               "PropertyModified",
-                                               "org.freedesktop.Hal.Device",
-                                               "org.freedesktop.Hal",
-                                               dev, path_keyword="path")
+        self.k.set_state_changed_cb(self.state_changed_cb)
+        self.k.set_killswitch_added_cb(self.device_added_cb)
+        self.k.set_killswitch_removed_cb(self.device_removed_cb)
 
-        self.bus.bus.add_signal_receiver(self.device_added_cb,
-                                           "DeviceAdded",
-                                           "org.freedesktop.Hal.Manager",
-                                           "org.freedesktop.Hal",
-                                           "/org/freedesktop/Hal/Manager")
-        self.bus.bus.add_signal_receiver(self.device_removed_cb,
-                                           "DeviceRemoved",
-                                           "org.freedesktop.Hal.Manager",
-                                           "org.freedesktop.Hal",
-                                           "/org/freedesktop/Hal/Manager")
-
-
+        for ks in self.k.get_killswitches():
+            self.create_menu_item(ks)
 
         sep = gtk.SeparatorMenuItem()
         self.menu.append(sep)
@@ -147,13 +76,10 @@ class KSA:
         item.show()
 
     def enable_all(self, widget, data=None):
-        for udi in self.switches:
-            self.bus.set_state(udi, 1)
+        self.k.enable_all()
 
     def disable_all(self, widget, data=None):
-        for udi in self.switches:
-            self.bus.set_state(udi, 0)
-
+        self.k.disable_all()
 
     def on_rightclick(self, widget, button, time, data=None):
         self.menu.popup(None, None, None, button, time, data=None)
@@ -161,53 +87,42 @@ class KSA:
     def on_leftclick(self, widget, button):
         self.menu.popup(None, None, None, 0, 0, data=None)
         
-    def create_menu_item(self, udi, name):
-        item = gtk.CheckMenuItem(name)
+    def create_menu_item(self, ks):
+        item = gtk.CheckMenuItem(ks.name())
 
         self.menu.prepend(item)
-        self.switches[udi] = item
+        self.switches[ks] = item
         
-        state = self.bus.get_state(udi)
-        print "state of %s is %d" % (udi, state)
+        state = ks.get_state()
+        print "state of %s is %d" % (ks.udi(), state)
 
-        item.set_active(self.bus.get_state(udi))
+        item.set_active(ks.get_state())
 
-        item.connect("toggled", self.toggle, udi)
+        item.connect("toggled", self.toggle, ks)
         item.show()
 
-    def toggle(self, widget, udi):
-        state = self.bus.get_state(udi)
+    def toggle(self, widget, ks):
+        state = ks.get_state()
         if state != widget.get_active():
             print "setting state to %s" % (not state)
-            self.bus.set_state(udi, not state)
+            ks.set_state(not state)
 
-    def property_modified_cb(self, num_changes, change_list, path):
-        print "signal received %s , %s , %s " % (path, num_changes, change_list)
-        self.update_menu(path)
-
-    def device_added_cb(self, path):
-        if self.bus.has_capability(path, "killswitch"):
-            print "new killswitch %s  " % (path)
-            name = self.bus.get_property(path, "killswitch.name")
-            if name == False:
-                print "Killswitch has no killswitch.name"
-                return
-            print "adding %s with name %s" % (path, name)
-            self.create_menu_item(path, name)
-
-    def device_removed_cb(self, path):
+    def state_changed_cb(self, ks, newval):
+        print "udi %s newval %d" % (ks.udi(), newval)
         for item in self.switches:
-            if path == item:
-                print "removing killswitch %s" % path
-                self.menu.remove(self.switches[item])
+            if item == ks:
+                self.switches[item].set_active(newval)
 
-    def update_menu(self, udi):
-        for item in self.switches:
-            if udi == item:
-                print "updating"
-                state = self.bus.get_state(item)
-                if self.switches[item].get_active() != state:
-                    self.switches[item].set_active(state)
+    def device_added_cb(self, ks):
+        print "adding menu item %s with name %s" % (ks.udi(), ks.name())
+        self.create_menu_item(ks)
+
+    def device_removed_cb(self, ks):
+        for item in self.switches.keys():
+            if ks == item:
+                print "removing killswitch menu item %s" % ks.udi()
+                self.menu.remove(self.switches[ks])
+                del self.switches[item]
                 
     def destroy(self, widget, data=None):
         gtk.main_quit()
