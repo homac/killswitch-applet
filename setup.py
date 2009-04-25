@@ -2,7 +2,7 @@
 
 from distutils.core import setup
 
-KILLSWITCH_APPLET_VERSION='0.1'
+KILLSWITCH_APPLET_VERSION='0.2'
 
 dist = setup(name='killswitch-applet',
     version=KILLSWITCH_APPLET_VERSION,
