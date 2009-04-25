@@ -88,7 +88,8 @@ class KSA:
         self.menu.popup(None, None, None, 0, 0, data=None)
         
     def create_menu_item(self, ks):
-        item = gtk.CheckMenuItem(ks.name())
+        label = "%s (%s)" % (ks.name(), ks.type())
+        item = gtk.CheckMenuItem(label)
 
         self.menu.prepend(item)
         self.switches[ks] = item
