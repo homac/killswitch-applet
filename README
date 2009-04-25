@@ -11,7 +11,11 @@ like bluetooth, WWAN or WLAN.
 Installation
 ============
 
- $ ./setup.py install
+You need at least the following packages:
+ python-gtk
+ dbus-1-python
+
+ $ sudo ./setup.py install
 
 
 Have fun,
