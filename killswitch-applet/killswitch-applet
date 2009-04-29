@@ -112,7 +112,11 @@ class KSA:
         print "udi %s newval %d" % (ks.udi(), newval)
         for item in self.switches:
             if item == ks:
-                self.switches[item].set_active(newval)
+                if newval == 2:
+                    self.switches[item].set_sensitive(False)
+                else:
+                    self.switches[item].set_sensitive(True)
+                    self.switches[item].set_active(newval)
 
     def device_added_cb(self, ks):
         print "adding menu item %s with name %s" % (ks.udi(), ks.name())
