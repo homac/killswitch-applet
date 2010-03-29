@@ -1,7 +1,11 @@
+2010-03-29  Holger Macht  <hmacht@suse.de>
+
+	* bump to version 0.2
+
 2009-04-25  Holger Macht  <hmacht@suse.de>
 
 	* killswitch-applet/killswitch-applet: add features:
 		- care about added/removed killswitches
 		- generic killswitch handling now lives in
-		  python-killswitch 
+		  python-killswitch
 
