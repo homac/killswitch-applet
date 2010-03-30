@@ -1,3 +1,9 @@
+2010-03-30  Holger Macht  <hmacht@suse.de>
+
+	* bump to version 0.2.1
+	* killswitch-applet/killswitch-applet: bail out if there are no
+	killswitches in the system
+
 2010-03-29  Holger Macht  <hmacht@suse.de>
 
 	* bump to version 0.2
