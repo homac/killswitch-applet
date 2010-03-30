@@ -43,6 +43,10 @@ class KSA:
         for ks in self.k.get_killswitches():
             self.create_menu_item(ks)
 
+        if len(self.switches) == 0:
+            print "No killswitches found, bailing out..."
+            exit(0)
+
         sep = gtk.SeparatorMenuItem()
         self.menu.append(sep)
         sep.show()
