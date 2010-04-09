@@ -16,7 +16,7 @@ import killswitch
 
 NAME="Killswitch Applet"
 VERSION="0.2.2"
-TRAY_ICON_PATH="%s/../share/icons/hicolor/32x32/apps/killswitch-applet.png"
+TRAY_ICON_PATH="%s/../share/icons/hicolor/scalable/apps/killswitch-applet.svg"
 
 def get_local_path():
     p = os.path.dirname(__file__)
