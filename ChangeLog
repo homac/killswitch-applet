@@ -1,3 +1,11 @@
+2010-04-09  Holger Macht  <hmacht@suse.de>
+
+	* setup.py: bump to version 0.2.2
+	* killswitch-applet/killswitch-applet:
+	  - Add About dialog
+	  - Use vector graphic (svg) for tray icon
+	  - Add tool tip with list of active kills switches
+
 2010-03-30  Holger Macht  <hmacht@suse.de>
 
 	* bump to version 0.2.1
