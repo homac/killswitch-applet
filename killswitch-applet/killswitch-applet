@@ -16,7 +16,7 @@ import killswitch
 import ConfigParser
 
 NAME="Killswitch Applet"
-VERSION="0.2.2"
+VERSION="0.2.3"
 TRAY_ICON_PATH="%s/../share/icons/hicolor/scalable/apps/killswitch-applet.svg"
 CONFIG_FILE="~/.killswitch.cfg"
 
