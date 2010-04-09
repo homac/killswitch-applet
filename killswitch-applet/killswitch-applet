@@ -13,10 +13,12 @@ import gtk
 import dbus
 import os.path
 import killswitch
+import ConfigParser
 
 NAME="Killswitch Applet"
 VERSION="0.2.2"
 TRAY_ICON_PATH="%s/../share/icons/hicolor/scalable/apps/killswitch-applet.svg"
+CONFIG_FILE="~/.killswitch.cfg"
 
 def get_local_path():
     p = os.path.dirname(__file__)
@@ -48,6 +50,8 @@ class KSA:
         if len(self.switches) == 0:
             print "No killswitches found, bailing out..."
             exit(0)
+
+        self.read_and_apply_config()
 
         self.update_icon_tool_tip()
 
@@ -135,6 +139,7 @@ class KSA:
                     self.switches[item].set_sensitive(True)
                     self.switches[item].set_active(newval)
         self.update_icon_tool_tip()
+        self.write_config()
 
     def device_added_cb(self, ks):
         print "adding menu item %s with name %s" % (ks.udi(), ks.name())
@@ -177,6 +182,29 @@ class KSA:
             text += " none"
 
         self.icon.set_tooltip_text(text)
+
+    def write_config(self):
+        config = ConfigParser.RawConfigParser()
+
+        config.add_section('Killswitches')
+
+        for ks in self.switches:
+            config.set('Killswitches', ks.name(), ks.get_state())
+
+            with open(os.path.expanduser(CONFIG_FILE), 'wb') as configfile:
+                config.write(configfile)
+
+    def read_and_apply_config(self):
+        config = ConfigParser.RawConfigParser()
+
+        config.read(os.path.expanduser(CONFIG_FILE))
+
+        if not config.has_section('Killswitches'):
+            return
+
+        for ks in self.switches:
+            if config.has_option('Killswitches', ks.name()):
+                ks.set_state(config.getboolean('Killswitches', ks.name()))
 
     def main(self):
         gtk.main()

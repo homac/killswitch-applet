@@ -1,3 +1,9 @@
+2010-04-10  Holger Macht  <hmacht@suse.de>
+
+	* killswitch-applet/killswitch-applet: Add config file
+	~/.killswitch.cfg to store the killswitch state and to restore it
+	when the applet starts
+
 2010-04-09  Holger Macht  <hmacht@suse.de>
 
 	* setup.py: bump to version 0.2.2
