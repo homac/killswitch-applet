@@ -14,6 +14,8 @@ import dbus
 import os.path
 import killswitch
 
+NAME="Killswitch Applet"
+VERSION="0.2.2"
 TRAY_ICON_PATH="%s/../share/icons/hicolor/32x32/apps/killswitch-applet.png"
 
 def get_local_path():
@@ -70,6 +72,14 @@ class KSA:
         sep = gtk.SeparatorMenuItem()
         self.menu.append(sep)
         sep.show()
+
+        item = gtk.ImageMenuItem("About...")
+        self.menu.append(item)
+        img = gtk.Image()
+        img.set_from_stock(gtk.STOCK_ABOUT, gtk.ICON_SIZE_MENU)
+        item.set_image(img)
+        item.connect("activate", self.show_about, None)
+        item.show()
 
         item = gtk.ImageMenuItem("Quit")
         self.menu.append(item)
@@ -135,6 +145,17 @@ class KSA:
                 
     def destroy(self, widget, data=None):
         gtk.main_quit()
+
+    def show_about(self, widget, data=None):
+        about = gtk.AboutDialog()
+        about.set_program_name(NAME)
+        about.set_version(VERSION)
+        about.set_copyright("(c) 2009,2010 Holger Macht <holger@homac.de>")
+        about.set_comments("Control kill switches for bluetooth, wireless, etc...")
+        about.set_website("http://gitorious.org/python-killswitch/killswitch-applet")
+        about.set_logo(gtk.gdk.pixbuf_new_from_file(TRAY_ICON_PATH % get_local_path()))
+        about.run()
+        about.destroy()
 
     def main(self):
         gtk.main()
