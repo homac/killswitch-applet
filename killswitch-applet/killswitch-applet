@@ -49,6 +49,8 @@ class KSA:
             print "No killswitches found, bailing out..."
             exit(0)
 
+        self.update_icon_tool_tip()
+
         sep = gtk.SeparatorMenuItem()
         self.menu.append(sep)
         sep.show()
@@ -121,6 +123,7 @@ class KSA:
         if state != widget.get_active():
             print "setting state to %s" % (not state)
             ks.set_state(not state)
+        self.update_icon_tool_tip()
 
     def state_changed_cb(self, ks, newval):
         print "udi %s newval %d" % (ks.udi(), newval)
@@ -131,10 +134,12 @@ class KSA:
                 else:
                     self.switches[item].set_sensitive(True)
                     self.switches[item].set_active(newval)
+        self.update_icon_tool_tip()
 
     def device_added_cb(self, ks):
         print "adding menu item %s with name %s" % (ks.udi(), ks.name())
         self.create_menu_item(ks)
+        self.update_icon_tool_tip()
 
     def device_removed_cb(self, ks):
         for item in self.switches.keys():
@@ -142,6 +147,7 @@ class KSA:
                 print "removing killswitch menu item %s" % ks.udi()
                 self.menu.remove(self.switches[ks])
                 del self.switches[item]
+        self.update_icon_tool_tip()
                 
     def destroy(self, widget, data=None):
         gtk.main_quit()
@@ -156,6 +162,21 @@ class KSA:
         about.set_logo(gtk.gdk.pixbuf_new_from_file(TRAY_ICON_PATH % get_local_path()))
         about.run()
         about.destroy()
+
+    def update_icon_tool_tip(self):
+        # construct the tool tip
+        text = "Active kill switches:"
+        num = 0
+
+        for item in self.switches.keys():
+            if item.get_state() == 0:
+                text += "\n - " + item.name()
+                num += 1
+
+        if num == 0:
+            text += " none"
+
+        self.icon.set_tooltip_text(text)
 
     def main(self):
         gtk.main()
